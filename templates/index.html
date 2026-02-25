@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thai Flood Radar – ระบบติดตามน้ำท่วมและฝน</title>
+
+  <!-- Google Fonts: Sarabun (Thai + Latin) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+  <!-- Leaflet -->
+  <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet" />
+
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+
+  <style>
+    /* ── Base ─────────────────────────────────── */
+    :root {
+      --bg:        #06101e;
+      --card:      #0c1e38;
+      --card2:     #102447;
+      --border:    #1a3260;
+      --primary:   #00b4d8;
+      --primary2:  #0096c7;
+      --success:   #22c55e;
+      --warning:   #f59e0b;
+      --danger:    #ef4444;
+      --critical:  #9333ea;
+      --muted:     #6b9ab8;
+      --text:      #dde8f0;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Sarabun', sans-serif;
+      font-size: 15px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ───────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, #041526 0%, #0a2a52 60%, #041526 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 44px; height: 44px;
+      background: var(--primary);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      color: #fff;
+      box-shadow: 0 0 14px rgba(0,180,216,.6);
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.1;
+    }
+
+    .brand-sub {
+      font-size: 12px;
+      color: var(--primary);
+      font-weight: 400;
+    }
+
+    #clock { color: var(--muted); font-size: 13px; white-space: nowrap; }
+
+    /* ── Stats bar ────────────────────────────── */
+    .stats-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 14px 20px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stat-card {
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 18px;
+      flex: 1;
+      min-width: 140px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .stat-icon {
+      width: 38px; height: 38px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .stat-value { font-size: 22px; font-weight: 700; line-height: 1; }
+    .stat-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Navigation tabs ──────────────────────── */
+    .nav-tabs-custom {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      display: flex;
+      gap: 4px;
+    }
+
+    .nav-tab {
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      border: none;
+      background: none;
+      border-bottom: 3px solid transparent;
+      transition: all .2s;
+    }
+
+    .nav-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .nav-tab:hover { color: var(--text); }
+
+    /* ── Tab panels ───────────────────────────── */
+    .tab-panel { display: none; padding: 20px; }
+    .tab-panel.active { display: block; }
+
+    /* ── Map ──────────────────────────────────── */
+    #map {
+      height: 460px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      z-index: 0;
+    }
+
+    /* ── Card ─────────────────────────────────── */
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .panel-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Province table ───────────────────────── */
+    .province-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+
+    .province-table th {
+      color: var(--muted);
+      font-weight: 600;
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .province-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid rgba(26,50,96,.4);
+      vertical-align: middle;
+    }
+
+    .province-table tbody tr:hover {
+      background: var(--card2);
+    }
+
+    /* ── Severity badge ───────────────────────── */
+    .badge-sev {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .sev-none    { background: rgba(34,197,94,.15);  color: var(--success); }
+    .sev-light   { background: rgba(0,180,216,.15);  color: var(--primary); }
+    .sev-moderate{ background: rgba(245,158,11,.15); color: var(--warning); }
+    .sev-heavy   { background: rgba(239,68,68,.15);  color: var(--danger); }
+    .sev-veryheavy { background: rgba(147,51,234,.15); color: var(--critical); }
+
+    /* Alert level badge */
+    .badge-alert {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .lv-watch     { background: rgba(245,158,11,.2);  color: var(--warning); }
+    .lv-warning   { background: rgba(239,68,68,.2);   color: var(--danger); }
+    .lv-emergency { background: rgba(147,51,234,.2);  color: var(--critical); }
+
+    /* ── Rain bars ────────────────────────────── */
+    .rain-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .rain-bar {
+      flex: 1;
+      height: 7px;
+      background: var(--card2);
+      border-radius: 999px;
+      overflow: hidden;
+      min-width: 60px;
+    }
+
+    .rain-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width .3s;
+    }
+
+    /* ── Alert card ───────────────────────────── */
+    .alert-card {
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-left-width: 4px;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+
+    .alert-card.watch     { border-left-color: var(--warning); }
+    .alert-card.warning   { border-left-color: var(--danger); }
+    .alert-card.emergency { border-left-color: var(--critical); }
+
+    .alert-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .alert-province { font-weight: 700; font-size: 15px; }
+    .alert-desc { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .alert-time { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+    /* ── Chart containers ─────────────────────── */
+    .chart-wrap { position: relative; height: 300px; }
+
+    /* ── Forecast table ───────────────────────── */
+    .forecast-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      text-align: center;
+    }
+
+    .forecast-day {
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 6px;
+    }
+
+    .forecast-day .day-name { font-size: 12px; color: var(--muted); }
+    .forecast-day .day-rain { font-size: 18px; font-weight: 700; margin: 6px 0 2px; }
+    .forecast-day .day-unit { font-size: 11px; color: var(--muted); }
+
+    /* ── Scrollable table ─────────────────────── */
+    .table-scroll { max-height: 420px; overflow-y: auto; }
+    .table-scroll::-webkit-scrollbar { width: 6px; }
+    .table-scroll::-webkit-scrollbar-track { background: var(--card2); border-radius: 3px; }
+    .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Loading spinner ──────────────────────── */
+    .spinner-wrap {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 200px;
+    }
+
+    /* ── Legend ───────────────────────────────── */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .legend-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Responsive ───────────────────────────── */
+    @media (max-width: 768px) {
+      .forecast-grid { grid-template-columns: repeat(4, 1fr); }
+      header { padding: 12px 16px; }
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ═══════════════ HEADER ═══════════════ -->
+<header>
+  <div class="brand">
+    <div class="brand-icon"><i class="fa-solid fa-water"></i></div>
+    <div>
+      <div class="brand-title">Thai Flood Radar</div>
+      <div class="brand-sub">ระบบติดตามน้ำท่วมและฝน ประเทศไทย</div>
+    </div>
+  </div>
+  <div id="clock"></div>
+</header>
+
+<!-- ═══════════════ STATS BAR ═══════════════ -->
+<div class="stats-bar">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(239,68,68,.15);color:var(--danger)"><i class="fa-solid fa-house-flood-water"></i></div>
+    <div>
+      <div class="stat-value" id="stat-affected">–</div>
+      <div class="stat-label">จังหวัดที่ถูกน้ำท่วม</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(0,180,216,.15);color:var(--primary)"><i class="fa-solid fa-cloud-rain"></i></div>
+    <div>
+      <div class="stat-value" id="stat-heavy-rain">–</div>
+      <div class="stat-label">จังหวัดฝนตกหนัก (24 ชม.)</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(245,158,11,.15);color:var(--warning)"><i class="fa-solid fa-triangle-exclamation"></i></div>
+    <div>
+      <div class="stat-value" id="stat-alerts">–</div>
+      <div class="stat-label">ประกาศเตือนภัยที่ใช้งาน</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(34,197,94,.15);color:var(--success)"><i class="fa-solid fa-satellite-dish"></i></div>
+    <div>
+      <div class="stat-value" id="stat-stations">77</div>
+      <div class="stat-label">สถานีวัดฝนทั่วประเทศ</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TABS NAV ═══════════════ -->
+<div class="nav-tabs-custom">
+  <button class="nav-tab active" onclick="switchTab('overview')"><i class="fa-solid fa-map me-1"></i>ภาพรวม</button>
+  <button class="nav-tab" onclick="switchTab('rain')"><i class="fa-solid fa-droplet me-1"></i>ข้อมูลฝน</button>
+  <button class="nav-tab" onclick="switchTab('forecast')"><i class="fa-solid fa-calendar-days me-1"></i>พยากรณ์ 7 วัน</button>
+  <button class="nav-tab" onclick="switchTab('alerts')"><i class="fa-solid fa-bell me-1"></i>ประกาศเตือนภัย</button>
+</div>
+
+<!-- ═══════════════ TAB: OVERVIEW ═══════════════ -->
+<div id="tab-overview" class="tab-panel active">
+  <div class="row g-3">
+
+    <!-- Map -->
+    <div class="col-lg-7">
+      <div class="panel" style="padding:12px">
+        <div class="panel-title"><i class="fa-solid fa-map-location-dot"></i> แผนที่ระดับน้ำท่วม</div>
+        <div id="map"></div>
+        <div class="legend mt-2">
+          <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>ปกติ</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#00b4d8"></div>ฝนเล็กน้อย</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>ฝนปานกลาง</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>ฝนหนัก</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#9333ea"></div>ฝนหนักมาก</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Province table -->
+    <div class="col-lg-5">
+      <div class="panel">
+        <div class="panel-title"><i class="fa-solid fa-list"></i> รายจังหวัด – พื้นที่ถูกน้ำท่วม</div>
+        <div class="table-scroll">
+          <table class="province-table">
+            <thead>
+              <tr>
+                <th>จังหวัด</th>
+                <th>ฝน 24 ชม.</th>
+                <th>พื้นที่เสียหาย (ไร่)</th>
+                <th>ระดับ</th>
+              </tr>
+            </thead>
+            <tbody id="province-table-body">
+              <tr><td colspan="4">
+                <div class="spinner-wrap"><div class="spinner-border text-info" role="status"></div></div>
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ TAB: RAIN ═══════════════ -->
+<div id="tab-rain" class="tab-panel">
+  <div class="row g-3">
+    <div class="col-12">
+      <div class="panel">
+        <div class="panel-title"><i class="fa-solid fa-chart-bar"></i> ปริมาณฝน 24 ชั่วโมงล่าสุด (มม.) – 20 จังหวัดสูงสุด</div>
+        <div class="chart-wrap">
+          <canvas id="rain-bar-chart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-12">
+      <div class="panel">
+        <div class="panel-title"><i class="fa-solid fa-wave-square"></i> ปริมาณฝนรายชั่วโมง – 24 ชั่วโมงล่าสุด (จังหวัดที่เลือก)</div>
+        <div class="mb-2">
+          <select id="province-select" class="form-select form-select-sm" style="background:var(--card2);border-color:var(--border);color:var(--text);max-width:260px">
+            <option value="">-- เลือกจังหวัด --</option>
+          </select>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="hourly-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB: FORECAST ═══════════════ -->
+<div id="tab-forecast" class="tab-panel">
+  <div class="panel">
+    <div class="panel-title"><i class="fa-solid fa-calendar-days"></i> พยากรณ์ฝน 7 วัน</div>
+    <div class="mb-3">
+      <select id="forecast-province-select" class="form-select form-select-sm" style="background:var(--card2);border-color:var(--border);color:var(--text);max-width:260px">
+        <option value="">-- เลือกจังหวัด --</option>
+      </select>
+    </div>
+    <div id="forecast-grid" class="forecast-grid">
+      <div class="spinner-wrap col-span-7"><div class="spinner-border text-info" role="status"></div></div>
+    </div>
+    <div class="chart-wrap mt-3">
+      <canvas id="forecast-chart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB: ALERTS ═══════════════ -->
+<div id="tab-alerts" class="tab-panel">
+  <div class="row g-3">
+    <div class="col-12">
+      <div class="panel">
+        <div class="panel-title"><i class="fa-solid fa-bell"></i> ประกาศเตือนภัยที่มีผลบังคับใช้</div>
+        <div id="alerts-container">
+          <div class="spinner-wrap"><div class="spinner-border text-info" role="status"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SCRIPTS ═══════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+/* ─── Clock ─── */
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) +
+    '  ' + now.toLocaleTimeString('th-TH');
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+/* ─── Tab switching ─── */
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+/* ─── Leaflet map ─── */
+const map = L.map('map', { zoomControl: true }).setView([13.0, 101.0], 5);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors',
+  maxZoom: 12
+}).addTo(map);
+
+const provinceMarkers = {};
+
+function intensityColor(intensity) {
+  switch (intensity) {
+    case 'None':      return '#22c55e';
+    case 'Light':     return '#00b4d8';
+    case 'Moderate':  return '#f59e0b';
+    case 'Heavy':     return '#ef4444';
+    case 'VeryHeavy': return '#9333ea';
+    default:          return '#22c55e';
+  }
+}
+
+function intensityThai(intensity) {
+  switch (intensity) {
+    case 'None':      return 'ปกติ';
+    case 'Light':     return 'ฝนเล็กน้อย';
+    case 'Moderate':  return 'ฝนปานกลาง';
+    case 'Heavy':     return 'ฝนหนัก';
+    case 'VeryHeavy': return 'ฝนหนักมาก';
+    default:          return 'ไม่ทราบ';
+  }
+}
+
+function alertTypeThai(t) {
+  switch(t) {
+    case 'FlashFlood':  return 'น้ำท่วมฉับพลัน';
+    case 'RiverFlood':  return 'น้ำท่วมจากแม่น้ำ';
+    case 'HeavyRain':   return 'ฝนตกหนัก';
+    case 'StormSurge':  return 'คลื่นพายุซัดฝั่ง';
+    case 'Landslide':   return 'ดินโคลนถล่ม';
+    default:            return t;
+  }
+}
+
+function alertLevelClass(l) {
+  switch(l) {
+    case 'Watch':     return 'lv-watch';
+    case 'Warning':   return 'lv-warning';
+    case 'Emergency': return 'lv-emergency';
+    default:          return 'lv-watch';
+  }
+}
+
+function alertLevelThai(l) {
+  switch(l) {
+    case 'Watch':     return 'เฝ้าระวัง';
+    case 'Warning':   return 'เตือนภัย';
+    case 'Emergency': return 'วิกฤต';
+    default:          return l;
+  }
+}
+
+/* ─── State ─── */
+let rainData = null;
+let forecastData = null;
+let rainBarChart = null;
+let hourlyChart = null;
+let forecastChart = null;
+
+/* ─── Colour palette for charts ─── */
+const CHART_COLORS = {
+  None:      '#22c55e',
+  Light:     '#00b4d8',
+  Moderate:  '#f59e0b',
+  Heavy:     '#ef4444',
+  VeryHeavy: '#9333ea',
+};
+
+/* ─── Fetch helpers ─── */
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+/* ─── Load rain data ─── */
+async function loadRainData() {
+  rainData = await fetchJSON('/v1/rain/current');
+
+  // Stats
+  const heavy = rainData.stations.filter(s =>
+    s.intensity === 'Heavy' || s.intensity === 'VeryHeavy').length;
+  document.getElementById('stat-heavy-rain').textContent = heavy;
+
+  // Province select
+  const sel = document.getElementById('province-select');
+  sel.innerHTML = '<option value="">-- เลือกจังหวัด --</option>';
+  rainData.stations.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.province_id;
+    opt.textContent = s.province_name + ' (' + s.province_en + ')';
+    sel.appendChild(opt);
+  });
+
+  sel.addEventListener('change', () => {
+    const pid = parseInt(sel.value);
+    if (pid) renderHourlyChart(pid);
+  });
+
+  // Map markers
+  rainData.stations.forEach(s => {
+    const color = intensityColor(s.intensity);
+    const radius = 6 + Math.min(s.amount_24h * 0.25, 14);
+
+    const marker = L.circleMarker([s.lat, s.lng], {
+      radius: radius,
+      fillColor: color,
+      color: '#fff',
+      weight: 1.5,
+      opacity: 0.9,
+      fillOpacity: 0.8
+    }).addTo(map);
+
+    marker.bindPopup(`
+      <div style="font-family:'Sarabun',sans-serif;min-width:180px">
+        <div style="font-weight:700;font-size:15px;margin-bottom:4px">${s.province_name}</div>
+        <div style="color:#555;font-size:13px">${s.province_en} · ${s.region}</div>
+        <hr style="margin:6px 0"/>
+        <div>🌧 ฝน 24 ชม.: <strong>${s.amount_24h} มม.</strong></div>
+        <div>🗓 ฝน 7 วัน: <strong>${s.amount_7d} มม.</strong></div>
+        <div>📊 ระดับ: <strong>${intensityThai(s.intensity)}</strong></div>
+      </div>
+    `);
+
+    provinceMarkers[s.province_id] = marker;
+  });
+
+  renderRainBarChart();
+}
+
+/* ─── Rain bar chart (top 20) ─── */
+function renderRainBarChart() {
+  const sorted = [...rainData.stations].sort((a, b) => b.amount_24h - a.amount_24h).slice(0, 20);
+  const labels = sorted.map(s => s.province_name);
+  const values = sorted.map(s => s.amount_24h);
+  const colors = sorted.map(s => intensityColor(s.intensity));
+
+  const ctx = document.getElementById('rain-bar-chart').getContext('2d');
+  if (rainBarChart) rainBarChart.destroy();
+  rainBarChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'ปริมาณฝน (มม.)',
+        data: values,
+        backgroundColor: colors,
+        borderRadius: 5,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          ticks: { color: '#6b9ab8', font: { family: 'Sarabun', size: 12 } },
+          grid: { color: 'rgba(26,50,96,.3)' }
+        },
+        y: {
+          ticks: { color: '#6b9ab8' },
+          grid: { color: 'rgba(26,50,96,.3)' },
+          title: { display: true, text: 'มม.', color: '#6b9ab8' }
+        }
+      }
+    }
+  });
+}
+
+/* ─── Hourly chart ─── */
+function renderHourlyChart(provinceId) {
+  const station = rainData.stations.find(s => s.province_id === provinceId);
+  if (!station) return;
+
+  const now = new Date();
+  const labels = station.hourly_data.map((_, i) => {
+    const h = new Date(now.getTime() - (23 - i) * 3600 * 1000);
+    return h.getHours().toString().padStart(2, '0') + ':00';
+  });
+
+  const ctx = document.getElementById('hourly-chart').getContext('2d');
+  if (hourlyChart) hourlyChart.destroy();
+  hourlyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: station.province_name + ' (มม./ชม.)',
+        data: station.hourly_data,
+        borderColor: '#00b4d8',
+        backgroundColor: 'rgba(0,180,216,.12)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#dde8f0', font: { family: 'Sarabun' } } } },
+      scales: {
+        x: { ticks: { color: '#6b9ab8' }, grid: { color: 'rgba(26,50,96,.3)' } },
+        y: {
+          ticks: { color: '#6b9ab8' },
+          grid: { color: 'rgba(26,50,96,.3)' },
+          title: { display: true, text: 'มม.', color: '#6b9ab8' }
+        }
+      }
+    }
+  });
+}
+
+/* ─── Load flood affected overview ─── */
+async function loadFloodOverview() {
+  const data = await fetchJSON('/v1/affected/overview');
+  document.getElementById('stat-affected').textContent = data.affectedAreas.length;
+
+  const tbody = document.getElementById('province-table-body');
+
+  // Merge with rain intensity
+  const rainMap = {};
+  if (rainData) {
+    rainData.stations.forEach(s => { rainMap[s.province_id] = s; });
+  }
+
+  if (data.affectedAreas.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--success);padding:20px"><i class="fa-solid fa-circle-check"></i> ไม่มีพื้นที่ถูกน้ำท่วมในวันนี้</td></tr>';
+    return;
+  }
+
+  // Sort by affected desc
+  const sorted = [...data.affectedAreas].sort((a, b) => b.affected - a.affected);
+
+  tbody.innerHTML = sorted.map(area => {
+    const station = rainMap[area.id];
+    const rain24h = station ? station.amount_24h : '–';
+    const intensity = station ? station.intensity : '';
+    const maxRain = rainData ? Math.max(...rainData.stations.map(s => s.amount_24h)) : 100;
+    const pct = station ? Math.min((station.amount_24h / maxRain) * 100, 100) : 0;
+    const barColor = intensityColor(intensity);
+    const sevClass = 'sev-' + intensity.toLowerCase();
+
+    return `<tr>
+      <td>
+        <div style="font-weight:600">${area.name}</div>
+        <div style="font-size:11px;color:var(--muted)">${station ? station.province_en : ''}</div>
+      </td>
+      <td>
+        <div class="rain-bar-wrap">
+          <span style="min-width:40px;font-size:13px">${rain24h} มม.</span>
+          <div class="rain-bar"><div class="rain-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+        </div>
+      </td>
+      <td>${(area.affected || 0).toLocaleString()}</td>
+      <td><span class="badge-sev ${sevClass}">${intensityThai(intensity)}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ─── Load forecast ─── */
+async function loadForecast() {
+  forecastData = await fetchJSON('/v1/rain/forecast');
+
+  // Province select for forecast tab
+  const sel = document.getElementById('forecast-province-select');
+  sel.innerHTML = '<option value="">-- เลือกจังหวัด --</option>';
+  forecastData.forecasts.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f.province_id;
+    opt.textContent = f.province_name;
+    sel.appendChild(opt);
+  });
+
+  sel.addEventListener('change', () => {
+    const pid = parseInt(sel.value);
+    if (pid) renderForecast(pid);
+  });
+
+  // Default: first province
+  if (forecastData.forecasts.length > 0) {
+    sel.value = forecastData.forecasts[0].province_id;
+    renderForecast(forecastData.forecasts[0].province_id);
+  }
+}
+
+const DAY_NAMES_TH = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+
+function renderForecast(provinceId) {
+  const forecast = forecastData.forecasts.find(f => f.province_id === provinceId);
+  if (!forecast) return;
+
+  // Grid cards
+  const grid = document.getElementById('forecast-grid');
+  grid.innerHTML = forecast.daily.map(d => {
+    const date = new Date(d.date + 'T00:00:00');
+    const dayName = DAY_NAMES_TH[date.getDay()];
+    const color = intensityColor(d.intensity);
+    return `<div class="forecast-day">
+      <div class="day-name">${dayName}<br>${date.getDate()}/${date.getMonth()+1}</div>
+      <div class="day-rain" style="color:${color}">${d.amount}</div>
+      <div class="day-unit">มม.</div>
+      <div style="font-size:11px;color:${color};margin-top:4px">${intensityThai(d.intensity)}</div>
+    </div>`;
+  }).join('');
+
+  // Forecast line chart
+  const ctx = document.getElementById('forecast-chart').getContext('2d');
+  if (forecastChart) forecastChart.destroy();
+  forecastChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: forecast.daily.map(d => {
+        const dt = new Date(d.date + 'T00:00:00');
+        return DAY_NAMES_TH[dt.getDay()] + ' ' + dt.getDate() + '/' + (dt.getMonth()+1);
+      }),
+      datasets: [{
+        label: 'พยากรณ์ฝน (มม.)',
+        data: forecast.daily.map(d => d.amount),
+        borderColor: '#00b4d8',
+        backgroundColor: 'rgba(0,180,216,.12)',
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: forecast.daily.map(d => intensityColor(d.intensity)),
+        pointRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#dde8f0', font: { family: 'Sarabun' } } } },
+      scales: {
+        x: { ticks: { color: '#6b9ab8' }, grid: { color: 'rgba(26,50,96,.3)' } },
+        y: {
+          ticks: { color: '#6b9ab8' },
+          grid: { color: 'rgba(26,50,96,.3)' },
+          title: { display: true, text: 'มม.', color: '#6b9ab8' }
+        }
+      }
+    }
+  });
+}
+
+/* ─── Load alerts ─── */
+async function loadAlerts() {
+  const data = await fetchJSON('/v1/alerts');
+  document.getElementById('stat-alerts').textContent = data.total_alerts;
+
+  const container = document.getElementById('alerts-container');
+  if (data.total_alerts === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:40px;color:var(--success)">
+        <i class="fa-solid fa-shield-halved" style="font-size:36px;margin-bottom:12px"></i>
+        <div>ไม่มีประกาศเตือนภัยที่ใช้งานอยู่</div>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = data.alerts.map(a => {
+    const issued = new Date(a.issued_at * 1000).toLocaleString('th-TH');
+    const expires = new Date(a.expires_at * 1000).toLocaleString('th-TH');
+    const cls = a.level.toLowerCase();
+    const lvClass = alertLevelClass(a.level);
+    return `<div class="alert-card ${cls}">
+      <div class="alert-header">
+        <div>
+          <span class="badge-alert ${lvClass}">${alertLevelThai(a.level)}</span>
+          <span style="margin-left:8px;font-size:12px;color:var(--muted)">${alertTypeThai(a.type)}</span>
+        </div>
+        <div class="alert-province">${a.province_name}</div>
+      </div>
+      <div class="alert-desc">${a.description}</div>
+      <div class="alert-time">
+        <i class="fa-regular fa-clock"></i>
+        ออกประกาศ: ${issued} · หมดอายุ: ${expires}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ─── Bootstrap ─── */
+async function init() {
+  try {
+    await loadRainData();
+    await loadFloodOverview();
+    loadForecast();
+    loadAlerts();
+  } catch (err) {
+    console.error('Init error:', err);
+  }
+}
+
+init();
+
+// Auto-refresh every 5 minutes
+setInterval(async () => {
+  try {
+    await loadRainData();
+    await loadFloodOverview();
+    loadAlerts();
+  } catch (e) { /* ignore */ }
+}, 5 * 60 * 1000);
+</script>
+
+</body>
+</html>
